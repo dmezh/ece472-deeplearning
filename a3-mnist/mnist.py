@@ -1,11 +1,8 @@
 #!/bin/env/python3
 
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import numpy as np
 import tensorflow as tf
-
-import pickle
 
 def import_images(filename):
     with open(filename, mode='rb') as images:
@@ -36,32 +33,38 @@ def main():
     images = import_images('train-images-idx3-ubyte')
     labels = import_labels('train-labels-idx1-ubyte')
 
-    training_data = tf.data.Dataset.from_tensor_slices((images, labels))
-
     t_images = import_images('t10k-images-idx3-ubyte')
     t_labels = import_labels('t10k-labels-idx1-ubyte')
 
-    test_data = tf.data.Dataset.from_tensor_slices((t_images, t_labels))
+    BATCH_SIZE = 128
 
-    BATCH_SIZE = 64
-    SHUFFLE_BUFFER_SIZE = 100
+    images = np.expand_dims(images, axis=-1) # add batch axis
+    labels = tf.keras.utils.to_categorical(labels, num_classes=10) # change from 0-9 to categorical ([0,..1,0])
+    t_images = np.expand_dims(t_images, axis=-1)
+    t_labels = tf.keras.utils.to_categorical(t_labels, num_classes=10)
 
-    training_data = training_data.shuffle(SHUFFLE_BUFFER_SIZE).batch(BATCH_SIZE)
-    test_data = test_data.batch(500)
+    print("Training ...")
 
+    # input -> Dropout -> Conv2D -> MaxPooling2D -> Dropout -> Conv2D -> MaxPooling2D -> Flatten -> Dropout -> Dense (output)
     model = tf.keras.Sequential([
-        tf.keras.layers.Flatten(input_shape=(28, 28)),
-        tf.keras.layers.Dropout(0.1),
-        tf.keras.layers.Dense(128, activation='relu', kernel_regularizer='l2'),
-        tf.keras.layers.Dense(10, activation='softmax')
+        tf.keras.layers.Dropout(0.3, input_shape=(28, 28, 1)),
+        tf.keras.layers.Conv2D(28, (4,4), activation='relu', input_shape=(28, 28, 1), kernel_regularizer='l2', use_bias=True),
+        tf.keras.layers.MaxPooling2D((3, 3)),
+        tf.keras.layers.Dropout(0.3),
+        tf.keras.layers.Conv2D(52, (3,3), activation='relu', input_shape=(28, 28, 1), kernel_regularizer='l2', use_bias=True),
+        tf.keras.layers.MaxPooling2D((2, 2)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dropout(0.3),
+        tf.keras.layers.Dense(10, activation='softmax', kernel_regularizer='l2', use_bias=True),
     ])
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(),
-                loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                metrics=['sparse_categorical_accuracy'])
+    model.compile(optimizer=tf.keras.optimizers.RMSprop(),
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
 
-    model.fit(training_data, epochs=12)
-    model.evaluate(test_data)
+    model.summary()
+    model.fit(images, labels, batch_size=BATCH_SIZE, epochs=5, validation_split=0.2)
+    model.evaluate(t_images, t_labels)
 
 if __name__ == "__main__":
     main()
